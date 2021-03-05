@@ -1,7 +1,9 @@
 #include <iostream>
 #include <uwebsockets/App.h>
 #include <map>
-
+#include <string>
+#include <algorithm>
+#include <regex>
 
 //доп функции
 //1 добавить имя +
@@ -13,13 +15,29 @@ struct PerSocketData {
     string name; // имя
     unsigned int user_id; // id пользователя
 };
-map<unsigned int, string> userNames;
+ 
 const string MES_TO = "MESSAGE_TO::";
 const string NAME = "SET_NAME::";
 const string OFF = "OFFLINE::";
 const string ON = "ONLINE::";
+const string BOT_AN = "MESSAGE_FROM::BOT::";
+map<unsigned int, string> userNames;
+map<string, string> database =
+{
+    {"hello", "oh, Hi! How are you"},
+    {"how are you", "Im doing just fine, LOL"},
+    {"what are you doing", "I'm answering stupid question"},
+    {"where are you from", "I'm from withing your mind"},
+    {"how old are you", "I'm 10 nanoseconds old"},
+    {"what are youu", "I'm your frendly ChatBot"},
+    {"fuck", "Bitch, don't swear here"},
+    {"what do you like to drink", "I LOVE VODKA "},
+    {"do you have instagram", "Ooo don't even think about it"},
+    {"what time", "It's time to press the 'exit' button"},
+    {"clubhouse", "Not a word about the clubhouse"}
+};
 
-void updateName(PerSocketData* data)
+void updateName(PerSocketData * data)
 {
     userNames[data->user_id] = data->name;
 }
@@ -86,6 +104,13 @@ string parseUserTxt(string message)
     return rest.substr(pos + 2);
 }
 
+//переводим текст сообщения в строчные буквы
+string to_lower(string txt)
+{
+    transform(txt.begin(), txt.end(), txt.begin(), ::tolower);
+    return txt;
+}
+
 int main() {
 
     unsigned int last_user_id = 10; // последий индефикатор пользователя
@@ -95,10 +120,10 @@ int main() {
             /* Settings */
             .idleTimeout = 1200, // timeout 
             /* Handlers */
-            .open = [&last_user_id](auto*ws) {
+            .open = [&last_user_id](auto* ws) {
                 // лямбда функция запускается при открытие соединения
                 //0 получить структуру данных
-               PerSocketData* user_data = (PerSocketData *)ws->getUserData();
+               PerSocketData* user_data = (PerSocketData*)ws->getUserData();
                //1 названить пользователю уник. индефикатор
                user_data->name = "UNNAMED";
                user_data->user_id = last_user_id++;
@@ -106,7 +131,7 @@ int main() {
                ws->publish("broadcast", "Someone connected");
                cout << "New user connecter, id = " << user_data->user_id << endl;
                // выводим сколько юзеров всего в сети
-               cout << "Total users connected:" << userNames.size() << endl; 
+               cout << "Total users connected:" << userNames.size() << endl;
                // подписываем пользователя к личному каналу
                ws->subscribe("user#" + to_string(user_data->user_id));
                // подписываем к общему каналу
@@ -129,7 +154,7 @@ int main() {
                 {
                     // подготавливаем данные
                     string receiver_id = parseUserId(strMes); // узнаем id
-                    if (stoul(receiver_id) < 10 || stoul(receiver_id) > (userNames.size() + 9)) // если такого id не существует
+                    if ((stoul(receiver_id) < 10 && stoul(receiver_id) != 1) || stoul(receiver_id) > (userNames.size() + 9)) // если такого id не существует
                         ws->send("Error, there is no user with ID = " + receiver_id, uWS::OpCode::TEXT); // выводим ошибку
                     else
                     {
@@ -138,6 +163,23 @@ int main() {
                         // отправляем
                         ws->publish("user#" + receiver_id, outgoingMessage, uWS::OpCode::TEXT);
                         ws->send("Message sent", uWS::OpCode::TEXT);
+                        if (stoul(receiver_id) == 1)
+                    {
+                        int num_answers = 0;
+                        for (auto entry : database)
+                        {
+                            regex patern = regex(".*" + entry.first + ".*");
+                            if (regex_match(to_lower(outgoingMessage), patern))
+                            {
+                                ++num_answers;
+                                ws->send(BOT_AN +  entry.second , uWS::OpCode::TEXT);
+                            }
+                        }
+                        if (num_answers == 5)
+                            ws->send(BOT_AN + "Oiiiii, I very talkative today" , uWS::OpCode::TEXT);
+                        if (num_answers == 0)
+                            ws->send(BOT_AN + "Oiiiii, I don't knooow" , uWS::OpCode::TEXT);
+                    }
                         cout << "User #" << author_id << " wrote message to " << receiver_id << endl;
                     }
                 }
